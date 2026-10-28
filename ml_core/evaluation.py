@@ -7,7 +7,7 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from ml_core.config import config
+from ml_core.core.config import config
 from xgboost import XGBClassifier
 from sklearn.metrics import (
     roc_auc_score,

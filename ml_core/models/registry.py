@@ -8,7 +8,7 @@ import json
 import os
 from sklearn.model_selection import cross_val_score, StratifiedKFold, RandomizedSearchCV
 from sklearn.linear_model import LogisticRegression
-from ml_core.config import config
+from ml_core.core.config import config
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.metrics import (

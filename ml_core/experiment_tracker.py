@@ -9,7 +9,7 @@ import hashlib
 from datetime import datetime
 from typing import Dict, Any
 import pandas as pd
-from ml_core.config import config
+from ml_core.core.config import config
 
 
 class ExperimentTracker:

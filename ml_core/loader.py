@@ -4,7 +4,7 @@
 """
 
 import pandas as pd
-from ml_core.config import optimize_dtypes
+from ml_core.core.config import optimize_dtypes
 import hashlib
 from ml_core.error_handler import logger
 
