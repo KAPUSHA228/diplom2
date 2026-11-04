@@ -1,0 +1,45 @@
+# Pre-commit конфигурация
+# Установка: pip install pre-commit black ruff && pre-commit install
+# Ручной запуск: pre-commit run --all-files
+
+repos:
+  # === Форматирование Python ===
+  - repo: https://github.com/psf/black
+    rev: 26.3.1
+    hooks:
+      - id: black
+        language_version: python3
+        args: [ --line-length=120 ]
+
+  # === Линтер Python ===
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.9
+    hooks:
+      - id: ruff
+        args: [ --fix, --exit-non-zero-on-fix, --ignore=E501 ]
+
+  # === Утилиты ===
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Убирает trailing whitespace
+      - id: trailing-whitespace
+      # Добавляет newline в конец файла
+      - id: end-of-file-fixer
+      # Проверка YAML
+      - id: check-yaml
+      # Проверка JSON
+      - id: check-json
+      # Проверка TOML
+      - id: check-toml
+      # Не коммитить большие файлы (>500KB)
+      - id: check-added-large-files
+        args: [ --maxkb=500 ]
+      # Не коммитить merge-конфликты
+      - id: check-merge-conflict
+      # Проверка case-sensitive импортов
+      - id: check-case-conflict
+      # Проверка синтаксиса Python
+      - id: check-ast
+      # Ловит забытые breakpoint()/pdb
+      - id: debug-statements
