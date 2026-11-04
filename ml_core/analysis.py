@@ -2,20 +2,16 @@
 Модуль для анализа данных (кластеризация, корреляция)
 """
 
-import plotly.express as px
 import numpy as np
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 from ml_core.error_handler import logger
 from ml_core.core.config import config  # общая утилита
-from ml_core.cache import cache_result  # кеширование
 
 # ---- Корреляционный анализ ----
 
 
-@cache_result
 def correlation_analysis(df, feature_cols, target_col, corr_threshold=0.3, output_prefix="corr"):
     """
     Полный корреляционный анализ: матрица Pearson, strong_matrix (≥ порога),
@@ -76,7 +72,6 @@ def correlation_analysis(df, feature_cols, target_col, corr_threshold=0.3, outpu
     }
 
 
-@cache_result
 def cluster_students(df, n_clusters=3, feature_cols=None):
     """
     Кластеризация студентов методом K-means с предварительным масштабированием.
@@ -130,73 +125,73 @@ def analyze_cluster_profiles(df, features, cluster_col="cluster"):
     return profiles
 
 
-def plot_clusters_pca(df, labels, features):
-    """
-    Визуализирует кластеры в 2D-пространстве через PCA (Plotly).
-
-    Args:
-        df: DataFrame с данными
-        labels: метки кластеров (массив или Series)
-        features: список имён признаков для PCA
-
-    Returns:
-        plotly.graph_objects.Figure: интерактивный scatter-график
-    """
-    df = df.copy()
-
-    X = df[features].fillna(df[features].median())
-
-    # Для 1 признака — строим гистограмму/ящик с усами
-    if len(features) < 2:
-        fig = px.box(
-            x=X.iloc[:, 0],
-            color=labels,
-            title=f"Кластеризация (1 признак: {features[0]})",
-            labels={"x": features[0], "color": "Кластер"},
-        )
-        return fig
-
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    pca = PCA(n_components=2, random_state=42)
-    X_pca = pca.fit_transform(X_scaled)
-
-    fig = px.scatter(
-        x=X_pca[:, 0],
-        y=X_pca[:, 1],
-        color=labels,
-        title=f"Кластеризация (PCA: {pca.explained_variance_ratio_[0]:.1%}, {pca.explained_variance_ratio_[1]:.1%})",
-        labels={"x": "PC1", "y": "PC2", "color": "Кластер"},
-    )
-
-    return fig
-
-
-def plot_corr_heatmap(corr_df, title="Корреляционная матрица"):
-    """
-    Строит Plotly heatmap корреляционной матрицы.
-
-    Args:
-        corr_df: pd.DataFrame — корреляционная матрица (из corr_result["full_matrix"])
-        title: заголовок графика
-
-    Returns:
-        plotly.graph_objects.Figure
-    """
-    import plotly.express as px
-
-    # Убираем target из матрицы если он есть (он будет отдельной диагональю)
-    fig = px.imshow(
-        corr_df,
-        text_auto=".2f",
-        color_continuous_scale="RdBu_r",
-        zmin=-1,
-        zmax=1,
-        title=title,
-    )
-    fig.update_layout(
-        height=400 + len(corr_df) * 20,
-        width=400 + len(corr_df.columns) * 20,
-    )
-    return fig
+# def plot_clusters_pca(df, labels, features):
+#     """
+#     Визуализирует кластеры в 2D-пространстве через PCA (Plotly).
+#
+#     Args:
+#         df: DataFrame с данными
+#         labels: метки кластеров (массив или Series)
+#         features: список имён признаков для PCA
+#
+#     Returns:
+#         plotly.graph_objects.Figure: интерактивный scatter-график
+#     """
+#     df = df.copy()
+#
+#     X = df[features].fillna(df[features].median())
+#
+#     # Для 1 признака — строим гистограмму/ящик с усами
+#     if len(features) < 2:
+#         fig = px.box(
+#             x=X.iloc[:, 0],
+#             color=labels,
+#             title=f"Кластеризация (1 признак: {features[0]})",
+#             labels={"x": features[0], "color": "Кластер"},
+#         )
+#         return fig
+#
+#     scaler = StandardScaler()
+#     X_scaled = scaler.fit_transform(X)
+#
+#     pca = PCA(n_components=2, random_state=42)
+#     X_pca = pca.fit_transform(X_scaled)
+#
+#     fig = px.scatter(
+#         x=X_pca[:, 0],
+#         y=X_pca[:, 1],
+#         color=labels,
+#         title=f"Кластеризация (PCA: {pca.explained_variance_ratio_[0]:.1%}, {pca.explained_variance_ratio_[1]:.1%})",
+#         labels={"x": "PC1", "y": "PC2", "color": "Кластер"},
+#     )
+#
+#     return fig
+#
+#
+# def plot_corr_heatmap(corr_df, title="Корреляционная матрица"):
+#     """
+#     Строит Plotly heatmap корреляционной матрицы.
+#
+#     Args:
+#         corr_df: pd.DataFrame — корреляционная матрица (из corr_result["full_matrix"])
+#         title: заголовок графика
+#
+#     Returns:
+#         plotly.graph_objects.Figure
+#     """
+#     import plotly.express as px
+#
+#     # Убираем target из матрицы если он есть (он будет отдельной диагональю)
+#     fig = px.imshow(
+#         corr_df,
+#         text_auto=".2f",
+#         color_continuous_scale="RdBu_r",
+#         zmin=-1,
+#         zmax=1,
+#         title=title,
+#     )
+#     fig.update_layout(
+#         height=400 + len(corr_df) * 20,
+#         width=400 + len(corr_df.columns) * 20,
+#     )
+#     return fig

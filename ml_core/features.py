@@ -5,11 +5,9 @@
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from imblearn.over_sampling import SMOTE
 from sklearn.feature_selection import mutual_info_classif, RFE
 from itertools import combinations
 from typing import List, Optional
-from ml_core.error_handler import logger
 
 
 def build_composite_score(
@@ -199,40 +197,6 @@ def select_features_for_model(x, y, top_n=7, final_n=5):
     return x[top_features], top_features
 
 
-# ---- Предобработка и борьба с дисбалансом ----
-def preprocess_data(df: pd.DataFrame, feature_cols: list, target_col: str, use_smote: bool = True):
-    """
-    Предобработка: заполнение пропусков медианой + опциональный SMOTE.
-
-    Args:
-        df: исходный DataFrame
-        feature_cols: список имён признаков
-        target_col: имя целевой переменной
-        use_smote: применять ли SMOTE для балансировки классов
-
-    Returns:
-        (X, y): обработанные признаки и целевая переменная
-    """
-    df = df.copy()
-
-    x = df[feature_cols].fillna(df[feature_cols].median(numeric_only=True))
-    y = df[target_col]
-
-    if not use_smote:
-        return x, y
-
-    min_class_size = y.value_counts().min()
-    if min_class_size <= 5:
-        logger.warning(f"SMOTE отключён: в меньшем классе всего {min_class_size} объектов")
-        return x, y
-
-    from imblearn.over_sampling import SMOTE
-
-    smote = SMOTE(random_state=42, k_neighbors=min(5, min_class_size - 1))
-    x_res, y_res = smote.fit_resample(x, y)
-    return x_res, y_res
-
-
 # ---- Отбор признаков ----
 def select_features(X, y, top_n=10, final_n=5):
     """
@@ -253,27 +217,6 @@ def select_features(X, y, top_n=10, final_n=5):
     X_sel = rfe.fit_transform(X[top_features], y)
     selected_cols = np.array(top_features)[rfe.support_]
     return pd.DataFrame(X_sel, columns=selected_cols), selected_cols
-
-
-def preprocess_data_for_smote(X_train: pd.DataFrame, y_train: pd.Series):
-    """
-    Применяет SMOTE ТОЛЬКО к обучающей выборке (без утечки в тест).
-
-    Args:
-        X_train: обучающие признаки
-        y_train: обучающие метки
-
-    Returns:
-        (X_res, y_res): сбалансированные данные (или исходные если SMOTE отключён)
-    """
-    min_class_size = y_train.value_counts().min()
-    if min_class_size <= 5:
-        logger.warning(f"SMOTE отключён: в меньшем классе {min_class_size} объектов")
-        return X_train, y_train
-
-    smote = SMOTE(random_state=42, k_neighbors=min(5, min_class_size - 1))
-    X_res, y_res = smote.fit_resample(X_train, y_train)
-    return X_res, y_res
 
 
 def create_feature_combinations(

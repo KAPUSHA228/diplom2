@@ -2,144 +2,14 @@
 Модуль для оценки моделей и объяснения предсказаний
 """
 
-import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from ml_core.core.config import config
 from xgboost import XGBClassifier
-from sklearn.metrics import (
-    roc_auc_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_curve,
-    confusion_matrix,
-)
 import shap
 import matplotlib.pyplot as plt
-
 from ml_core.error_handler import logger
-
-
-def calculate_metrics(y_true, y_pred, y_proba=None):
-    """
-    Вычисляет метрики классификации: F1, Precision, Recall, ROC-AUC.
-
-    Args:
-        y_true: истинные метки
-        y_pred: предсказанные метки
-        y_proba: вероятности положительного класса (для ROC-AUC)
-
-    Returns:
-        dict: {'f1', 'precision', 'recall', 'roc_auc' (если y_proba есть)}
-    """
-    metrics = {
-        "f1": f1_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred),
-        "recall": recall_score(y_true, y_pred),
-    }
-
-    if y_proba is not None:
-        metrics["roc_auc"] = roc_auc_score(y_true, y_proba)
-
-    return metrics
-
-
-def plot_roc_curves(models_dict, X_test, y_test):
-    """
-    Строит ROC-кривые для нескольких моделей (Plotly).
-
-    Args:
-        models_dict: dict {name: model} обученных моделей
-        X_test: тестовые признаки
-        y_test: истинные тестовые метки
-
-    Returns:
-        plotly.graph_objects.Figure: ROC-кривые всех моделей
-    """
-    fig = go.Figure()
-
-    # Диагональная линия (случайная модель)
-    fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="Random", line=dict(dash="dash", color="gray")))
-
-    for name, model in models_dict.items():
-        if hasattr(model, "predict_proba"):
-            y_proba = model.predict_proba(X_test)[:, 1]
-            fpr, tpr, _ = roc_curve(y_test, y_proba)
-            auc = roc_auc_score(y_test, y_proba)
-
-            fig.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines", name=f"{name} (AUC={auc:.3f})"))
-
-    fig.update_layout(
-        title="ROC-кривые моделей",
-        xaxis_title="False Positive Rate",
-        yaxis_title="True Positive Rate",
-        width=600,
-        height=500,
-    )
-
-    return fig
-
-
-def plot_confusion_matrix(y_true, y_pred, model_name):
-    """
-    Строит confusion matrix (Plotly).
-
-    Args:
-        y_true: истинные метки
-        y_pred: предсказанные метки
-        model_name: имя модели (для заголовка)
-
-    Returns:
-        plotly.graph_objects.Figure: confusion matrix
-    """
-    cm = confusion_matrix(y_true, y_pred)
-
-    fig = px.imshow(
-        cm,
-        text_auto=True,
-        aspect="auto",
-        labels=dict(x="Predicted", y="True"),
-        title=f"Confusion Matrix: {model_name}",
-        color_continuous_scale="Blues",
-    )
-
-    return fig
-
-
-def plot_feature_importance(model, feature_names, top_n=10):
-    """
-    Строит bar chart важности признаков (Plotly).
-
-    Args:
-        model: обученная модель с feature_importances_ или coef_
-        feature_names: список имён признаков
-        top_n: сколько лучших признаков показать
-
-    Returns:
-        plotly.graph_objects.Figure: bar chart важности
-    """
-    if hasattr(model, "feature_importances_"):
-        importances = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        importances = np.abs(model.coef_[0])
-    else:
-        return None
-
-    # Сортируем
-    indices = np.argsort(importances)[-top_n:]
-
-    fig = px.bar(
-        x=importances[indices],
-        y=[feature_names[i] for i in indices],
-        orientation="h",
-        title="Важность признаков",
-        labels={"x": "Importance", "y": ""},
-    )
-
-    return fig
 
 
 def generate_shap_explanations(
