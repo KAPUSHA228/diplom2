@@ -21,19 +21,24 @@ def get_shap_values(model, X):
         if "scaler" in steps and "clf" in steps:
             X_scaled = steps["scaler"].transform(X)
             clf = steps["clf"]
-            explainer = shap.LinearExplainer(clf, X_scaled)
+            masker = shap.maskers.Independent(X_scaled, max_samples=len(X_scaled))
+            explainer = shap.LinearExplainer(clf, masker)
             shap_values = explainer.shap_values(X_scaled)
             return np.asarray(shap_values)
         model = steps.get("clf", model)
 
     if hasattr(model, "get_booster") or hasattr(model, "estimators_"):
+        # Для деревьев (RF, XGB) фоновый датасет не нужен, они работают по структуре
         explainer = shap.TreeExplainer(model)
     elif hasattr(model, "coef_"):
-        explainer = shap.LinearExplainer(model, X)
+        # Для линейных моделей указываем, что можно использовать все объекты
+        explainer = shap.LinearExplainer(model, X, feature_perturbation="interventional", n_jobs=1)
     else:
-        explainer = shap.Explainer(model, X)
+        # Для всех остальных (на всякий случай) — явно задаем max_samples
+        explainer = shap.Explainer(model, X, max_samples=len(X), n_jobs=1)
 
     shap_values = explainer.shap_values(X)
+
     # Приводим к одному массиву (класс 1)
     if isinstance(shap_values, list):
         shap_values = shap_values[1] if len(shap_values) == 2 else shap_values[0]

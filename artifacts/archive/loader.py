@@ -6,7 +6,7 @@
 import pandas as pd
 from ml_core.core.config import optimize_dtypes
 import hashlib
-from ml_core.error_handler import logger
+from artifacts.archive.error_handler import logger
 
 # Служебные колонки (PII) — исключаем из превью полностью (и колонку, и данные)
 # Все в нижнем регистре для сравнения с col.strip().lower()

@@ -7,11 +7,13 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+import itertools
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from sklearn.datasets import make_classification
+from joblib import Parallel, delayed
 
 from balancing.registry import get_balancer
 from evaluation.metrics import compute_metrics
@@ -57,96 +59,100 @@ def _run_id(balancer: str, model: str, dataset: str) -> str:
     return f"{ts}_{balancer}_{model}_{dataset}_{uuid.uuid4().hex[:6]}"
 
 
+def _run_single_combination(ds_name, bal_name, model_name, grid, output_dir):
+    """
+    Выполняет все фолды для ОДНОЙ комбинации (датасет, балансировщик, модель).
+    Возвращает словарь со сводными метриками.
+    """
+    # 1. Загружаем данные внутри процесса (безопасно для памяти)
+    X, y = _load_dataset(ds_name)
+    folds = grid["cv_folds"]
+    n_repeats = grid.get("n_repeats", 1)
+
+    run_dir = Path(output_dir) / "runs" / _run_id(bal_name, model_name, ds_name)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    fold_metrics = []
+    all_shap_values = []
+
+    for repeat in range(n_repeats):
+        current_seed = 42 + repeat
+        skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=current_seed)
+
+        for fold_idx, (tr, te) in enumerate(skf.split(X, y)):
+            X_tr, X_te = X.iloc[tr], X.iloc[te]
+            y_tr, y_te = y.iloc[tr], y.iloc[te]
+
+            balancer = get_balancer(bal_name)
+            X_res, y_res = balancer.fit_resample(X_tr, y_tr)
+            sample_weight = balancer.get_sample_weight(y_res) if bal_name == "class_weight" else None
+
+            model = get_model(model_name)
+            model = _fit_model(model, X_res, y_res, sample_weight=sample_weight)
+
+            y_pred = model.predict(X_te)
+            y_proba = model.predict_proba(X_te)[:, 1] if hasattr(model, "predict_proba") else None
+
+            m = compute_metrics(y_te, y_pred, y_proba)
+            m["fold"] = fold_idx
+            m["repeat"] = repeat
+            m["seed"] = current_seed
+            fold_metrics.append(m)
+
+            shap_vals = get_shap_values(model, X_te)
+            all_shap_values.append(shap_vals)
+
+    # Сохранение результатов
+    metrics_df = pd.DataFrame(fold_metrics)
+    metrics_df.to_csv(run_dir / "metrics.csv", index=False)
+
+    if all_shap_values:
+        # Выравниваем размерности (срезаем до минимальной), чтобы np.stack не падал
+        min_len = min(a.shape[0] for a in all_shap_values)
+        all_shap_values = [a[:min_len] for a in all_shap_values]
+        np.save(run_dir / "shap_values.npy", np.stack(all_shap_values))
+
+    config_json = {
+        "balancer": bal_name,
+        "model": model_name,
+        "dataset": ds_name,
+        "cv_folds": folds,
+        "n_repeats": n_repeats,
+        "seed_base": 42,
+    }
+    with open(run_dir / "config.json", "w", encoding="utf-8") as f:
+        json.dump(config_json, f, ensure_ascii=False, indent=2)
+
+    summary = metrics_df.drop(columns=["fold", "repeat", "seed"]).mean().to_dict()
+    summary.update({"balancer": bal_name, "model": model_name, "dataset": ds_name, "run_dir": str(run_dir)})
+
+    print(f"[OK] {bal_name} × {model_name} × {ds_name} → {run_dir.name}")
+    return summary
+
+
 class ExperimentRunner:
     def __init__(self, grid=None, output_dir=None):
         self.grid = grid or EXPERIMENT_GRID
         self.output_dir = Path(output_dir or config.EXPERIMENTS_OUTPUT_DIR)
         (self.output_dir / "runs").mkdir(parents=True, exist_ok=True)
 
-    def run(self, datasets=None, balancers=None, models=None) -> pd.DataFrame:
+    def run(self, datasets=None, balancers=None, models=None, n_jobs=1) -> pd.DataFrame:
         datasets = datasets or self.grid["dataset"]
         balancers = balancers or self.grid["balancer"]
         models = models or self.grid["model"]
-        folds = self.grid["cv_folds"]
-        n_repeats = self.grid.get("n_repeats", 1)
-        rows = []
+        datasets = datasets or self.grid["dataset"]
+        balancers = balancers or self.grid["balancer"]
+        models = models or self.grid["model"]
 
-        for ds_name in datasets:
-            # Загружаем данные один раз для всего датасета
-            X, y = _load_dataset(ds_name)
+        # Формируем список всех комбинаций
+        combinations = list(itertools.product(datasets, balancers, models))
 
-            for bal_name in balancers:
-                for model_name in models:
-                    run_dir = self.output_dir / "runs" / _run_id(bal_name, model_name, ds_name)
-                    run_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Запуск {len(combinations)} комбинаций с параллелизмом (n_jobs={n_jobs})...")
 
-                    fold_metrics = []
-                    # Сюда будем собирать SHAP для всех 15 итераций
-                    all_shap_values = []
+        # Запускаем параллельно через joblib
+        # verbose=10 будет печатать статус завершения задач
+        results = Parallel(n_jobs=n_jobs, verbose=10)(
+            delayed(_run_single_combination)(ds, bal, mod, self.grid, self.output_dir) for ds, bal, mod in combinations
+        )
 
-                    # Цикл по повторам
-                    for repeat in range(n_repeats):
-                        # Меняем seed для каждого повтора, чтобы разбиение было разным
-                        current_seed = 42 + repeat
-                        skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=current_seed)
-
-                        # Цикл по блокам (фолдам)
-                        for fold_idx, (tr, te) in enumerate(skf.split(X, y)):
-                            X_tr, X_te = X.iloc[tr], X.iloc[te]
-                            y_tr, y_te = y.iloc[tr], y.iloc[te]
-
-                            balancer = get_balancer(bal_name)
-                            X_res, y_res = balancer.fit_resample(X_tr, y_tr)
-                            sample_weight = balancer.get_sample_weight(y_res) if bal_name == "class_weight" else None
-
-                            model = get_model(model_name)
-                            model = _fit_model(model, X_res, y_res, sample_weight=sample_weight)
-
-                            y_pred = model.predict(X_te)
-                            y_proba = model.predict_proba(X_te)[:, 1] if hasattr(model, "predict_proba") else None
-
-                            # Считаем метрики
-                            m = compute_metrics(y_te, y_pred, y_proba)
-                            m["fold"] = fold_idx
-                            m["repeat"] = repeat
-                            m["seed"] = current_seed
-                            fold_metrics.append(m)
-
-                            # Считаем SHAP для КАЖДОГО блока (без if fold_idx == 0)
-                            shap_vals = get_shap_values(model, X_te)
-                            all_shap_values.append(shap_vals)
-
-                    # --- Сохранение результатов ---
-
-                    # 1. Сохраняем метрики (15 строк)
-                    metrics_df = pd.DataFrame(fold_metrics)
-                    metrics_df.to_csv(run_dir / "metrics.csv", index=False)
-
-                    # 2. Сохраняем SHAP-значения (3D-массив: 15 x n_test x n_features)
-                    # np.stack превращает список массивов в единый 3D массив
-                    if all_shap_values:
-                        shap_3d_array = np.stack(all_shap_values)
-                        np.save(run_dir / "shap_values.npy", shap_3d_array)
-
-                    # 3. Сохраняем конфиг
-                    config_json = {
-                        "balancer": bal_name,
-                        "model": model_name,
-                        "dataset": ds_name,
-                        "cv_folds": folds,
-                        "n_repeats": n_repeats,
-                        "seed_base": 42,
-                    }
-                    with open(run_dir / "config.json", "w", encoding="utf-8") as f:
-                        json.dump(config_json, f, ensure_ascii=False, indent=2)
-
-                    # 4. Сохраняем сводку (среднее по 15 итерациям для быстрого просмотра)
-                    # Убираем технические колонки перед усреднением
-                    summary = metrics_df.drop(columns=["fold", "repeat", "seed"]).mean().to_dict()
-                    summary.update(
-                        {"balancer": bal_name, "model": model_name, "dataset": ds_name, "run_dir": str(run_dir)}
-                    )
-                    rows.append(summary)
-                    print(f"[OK] {bal_name} × {model_name} × {ds_name} ({n_repeats} повторов) → {run_dir.name}")
-
-        return pd.DataFrame(rows)
+        return pd.DataFrame(results)

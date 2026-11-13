@@ -1,10 +1,9 @@
 /.venv
 /.idea/*
-analysis_data/
-data/
+/analysis_data/
+/data/
 ml_core/__pycache__/
 .env.example
 /.pre-commit-cache
 prompts/*
-analysis_data/*
 experiments_output

@@ -226,7 +226,7 @@ def _generate_synthetic_data_tz():
     result["risk_flag"] = (risk_prob > 0.5).astype(int)
 
     # ========== 12. Добавляем композитные признаки ==========
-    from ml_core.features import add_composite_features
+    from artifacts.archive.features import add_composite_features
 
     result = add_composite_features(result)
 

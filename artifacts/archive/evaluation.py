@@ -9,7 +9,7 @@ from ml_core.core.config import config
 from xgboost import XGBClassifier
 import shap
 import matplotlib.pyplot as plt
-from ml_core.error_handler import logger
+from artifacts.archive.error_handler import logger
 
 
 def generate_shap_explanations(
