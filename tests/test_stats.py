@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from hypothesis import given, strategies as st
 
-from experiments.stats import bonferroni_correction, compare_balancers, confidence_intervals
+from artifacts.archive.stats import bonferroni_correction, compare_balancers, confidence_intervals
 
 
 def _make_results_df():
